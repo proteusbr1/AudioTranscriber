@@ -1,7 +1,3 @@
-Sure! Below is a comprehensive `README.md` for your project. I’ve chosen the name **AudioTranscriber** based on your project's functionality, but feel free to adjust it if you prefer another name from the earlier suggestions.
-
----
-
 # AudioTranscriber
 
 **AudioTranscriber** is a Python-based tool designed to streamline the process of converting audio from video files into text. It efficiently extracts audio from various video formats, splits large audio files into manageable segments, and leverages OpenAI's Whisper API to transcribe the audio into text. This tool is ideal for content creators, researchers, and developers seeking an automated and reliable transcription solution.
