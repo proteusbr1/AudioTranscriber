@@ -1,2 +1,19 @@
+# Python
+__pycache__/
+*.py[cod]
+*.pyo
+
+# Environment Variables
 .env
+
+# Virtual Environment
 venv/
+ENV/
+env/
+
+# Temporary Files
+*.tmp
+*.temp
+
+# Audio Segments
+*_part*.mp3
