@@ -51,31 +51,7 @@ OPENAI_API_KEY=your_openai_api_key_here
 Run the main script with the path to your audio or video file:
 
 ```bash
-python main.py --input path/to/video.mp4 --language en
-```
-
-
-
-### Example
-
-Assuming you have a video file named `video.mp4`:
-
-1. Place `video.mp4` in the root directory of the project.
-2. Run the script:
-
-```bash
-python main.py --input path/to/video.mp4 --language en
-```
-
-
-## 📄 Configuration
-
-### `.env` File
-
-The project uses a `.env` file to manage environment variables securely. Ensure that your `.env` file includes the following:
-
-```env
-OPENAI_API_KEY=your_openai_api_key_here
+python main.py --input video.mp4 --language en
 ```
 
 
