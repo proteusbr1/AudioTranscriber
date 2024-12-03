@@ -4,12 +4,91 @@ from dotenv import load_dotenv
 from pydub import AudioSegment
 from openai import OpenAI
 import argparse
+import datetime
+
+
+# -------------------- Supported Languages by OpenAI Whisper --------------------
+# The following dictionary lists the languages supported by OpenAI's Whisper model
+# along with their corresponding ISO 639-1 codes. Use these codes with the
+# `--language` or `-l` argument to specify the language of the audio for
+# transcription.
+
+SUPPORTED_LANGUAGES = {
+    "af": "Afrikaans",
+    "ar": "Arabic",
+    "hy": "Armenian",
+    "az": "Azerbaijani",
+    "be": "Belarusian",
+    "bs": "Bosnian",
+    "bg": "Bulgarian",
+    "ca": "Catalan",
+    "zh": "Chinese",
+    "hr": "Croatian",
+    "cs": "Czech",
+    "da": "Danish",
+    "nl": "Dutch",
+    "en": "English",
+    "et": "Estonian",
+    "fi": "Finnish",
+    "fr": "French",
+    "gl": "Galician",
+    "de": "German",
+    "el": "Greek",
+    "he": "Hebrew",
+    "hi": "Hindi",
+    "hu": "Hungarian",
+    "is": "Icelandic",
+    "id": "Indonesian",
+    "it": "Italian",
+    "ja": "Japanese",
+    "kn": "Kannada",
+    "kk": "Kazakh",
+    "ko": "Korean",
+    "lv": "Latvian",
+    "lt": "Lithuanian",
+    "mk": "Macedonian",
+    "ms": "Malay",
+    "mr": "Marathi",
+    "mi": "Maori",
+    "ne": "Nepali",
+    "no": "Norwegian",
+    "fa": "Persian",
+    "pl": "Polish",
+    "pt": "Portuguese",
+    "ro": "Romanian",
+    "ru": "Russian",
+    "sr": "Serbian",
+    "sk": "Slovak",
+    "sl": "Slovenian",
+    "es": "Spanish",
+    "sw": "Swahili",
+    "sv": "Swedish",
+    "tl": "Tagalog",
+    "ta": "Tamil",
+    "th": "Thai",
+    "tr": "Turkish",
+    "uk": "Ukrainian",
+    "ur": "Urdu",
+    "vi": "Vietnamese",
+    "cy": "Welsh"
+}
+# ----------------------------------------------------------------------------------
+
 
 def parse_arguments():
-    parser = argparse.ArgumentParser(description="AudioTranscriber: Extract and transcribe audio from video files.")
+    parser = argparse.ArgumentParser(
+        description="AudioTranscriber: Extract and transcribe audio from video files.",
+        epilog="Supported languages: " + ", ".join([f"{code} ({name})" for code, name in SUPPORTED_LANGUAGES.items()])
+    )
     parser.add_argument('--input', '-i', required=True, help='Path to the input audio or video file.')
     parser.add_argument('--language', '-l', default='en', help='Language code for transcription (default: en).')
-    return parser.parse_args()
+    parser.add_argument('--output', '-o', help='Path to the output text file for the transcription.')
+    args = parser.parse_args()
+
+    if args.language not in SUPPORTED_LANGUAGES:
+        parser.error(f"Unsupported language code '{args.language}'. Please choose from the supported languages listed in the comments.")
+
+    return args
 
 # Load environment variables from .env file
 load_dotenv()
@@ -126,12 +205,13 @@ def transcribe_audio(file_path, language=None, response_format="json"):
     return None
 
 
-def main(input_file_path, language="en"):
+def main(input_file_path, language="en", output_file_path=None):
     """
     Main function to extract audio from video (if necessary), split it if too large, and transcribe.
 
     :param input_file_path: Path to the original audio or video file.
     :param language: Language code of the audio (default: "en" for English).
+    :param output_file_path: Path to the output transcription file.
     """
     # Check if the file exists
     if not os.path.exists(input_file_path):
@@ -157,12 +237,19 @@ def main(input_file_path, language="en"):
         max_size_mb = 25
         max_size_bytes = max_size_mb * 1024 * 1024
 
+        # Determine the output file path
+        if not output_file_path:
+            base_name = os.path.splitext(os.path.basename(input_file_path))[0]
+            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+            output_file_path = f"{base_name}_{timestamp}_transcription.txt"
+
         if file_size <= max_size_bytes:
             print("The file is within the size limit. Proceeding with transcription.")
             transcription = transcribe_audio(audio_file_path, language=language)
             if transcription:
-                print("\n--- Audio Transcription ---")
-                print(transcription)
+                with open(output_file_path, 'w', encoding='utf-8') as f:
+                    f.write(transcription)
+                print(f"Transcription written to {output_file_path}")
             else:
                 print("Failed to transcribe the audio.")
         else:
@@ -185,8 +272,9 @@ def main(input_file_path, language="en"):
 
             # Combine all transcriptions
             combined_transcription = "\n".join(all_transcriptions)
-            print("\n--- Complete Audio Transcription ---")
-            print(combined_transcription)
+            with open(output_file_path, 'w', encoding='utf-8') as f:
+                f.write(combined_transcription)
+            print(f"Complete transcription written to {output_file_path}")
     finally:
         # Clean up temporary audio file if it was extracted from a video
         if file_ext in video_extensions and audio_file_path and os.path.exists(audio_file_path):
@@ -199,4 +287,4 @@ def main(input_file_path, language="en"):
 
 if __name__ == "__main__":
     args = parse_arguments()
-    main(args.input, language=args.language)
+    main(args.input, language=args.language, output_file_path=args.output)

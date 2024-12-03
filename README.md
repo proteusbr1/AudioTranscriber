@@ -51,7 +51,8 @@ OPENAI_API_KEY=your_openai_api_key_here
 Run the main script with the path to your audio or video file:
 
 ```bash
-python main.py --input video.mp4 --language en
+python main.py --input path/to/audio_or_video.mp4 --output path/to/output_transcription.txt --language en
+
 ```
 
 
