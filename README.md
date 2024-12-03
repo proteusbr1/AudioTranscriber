@@ -51,10 +51,15 @@ OPENAI_API_KEY=your_openai_api_key_here
 Run the main script with the path to your audio or video file:
 
 ```bash
-python main.py --input path/to/audio_or_video.mp4 --output path/to/output_transcription.txt --language en
+python main.py --input path/to/audio_or_video.mp4
 
 ```
 
+Or:
+```bash
+python main.py --input path/to/audio_or_video.mp4 --output path/to/output_transcription.txt --language en
+
+```
 
 ## 🤝 Contributing
 
@@ -88,16 +93,8 @@ Provide a clear description of your changes and the reasons behind them.
 
 This project is licensed under the [MIT License](LICENSE).
 
-## 📧 Contact
-
-For any questions or suggestions, feel free to open an issue or contact me at [your-email@example.com](mailto:your-email@example.com).
-
 ## 📚 Acknowledgements
 
 - [OpenAI](https://www.openai.com/) for the Whisper API.
 - [Pydub](https://github.com/jiaaro/pydub) for audio manipulation.
 - [dotenv](https://github.com/theskumar/python-dotenv) for environment variable management.
-
----
-
-Feel free to customize this `README.md` further to better fit your project's specific needs and to add any additional sections or information you find necessary.
