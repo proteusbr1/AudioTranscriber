@@ -1,21 +1,22 @@
 # AudioTranscriber
 
-**AudioTranscriber** is a Python-based tool designed to streamline the process of converting audio from video files into text. It efficiently extracts audio from various video formats, splits large audio files into manageable segments, and leverages OpenAI's Whisper API to transcribe the audio into text. This tool is ideal for content creators, researchers, and developers seeking an automated and reliable transcription solution.
+**AudioTranscriber** is a Python-based tool designed to automate the process of converting audio from video files into text. It efficiently extracts audio from various video formats, splits large audio files into manageable segments, and leverages OpenAI's Whisper API to transcribe the audio. This tool is ideal for content creators, researchers, and developers seeking an automated and reliable transcription solution.
 
 ## 🛠️ Features
 
-- **Audio Extraction**: Extracts audio from multiple video formats such as MP4, MOV, AVI, MKV, FLV, and WMV.
-- **Audio Splitting**: Automatically splits large audio files into smaller segments to comply with size limitations.
-- **Transcription**: Utilizes OpenAI's Whisper API for accurate and efficient audio transcription.
-- **Error Handling**: Comprehensive error handling for API authentication, rate limits, connection issues, and more.
-- **Environment Configuration**: Easy setup using environment variables for secure API key management.
+- **Audio Extraction**: Extracts audio from video formats such as MP4, MOV, AVI, MKV, FLV, and WMV.
+- **Audio Splitting**: Automatically splits very large audio files into smaller parts to comply with size limitations.
+- **Transcription**: Utilizes OpenAI's Whisper API for efficient and accurate audio transcription.
+- **Summarization**: Creates a summary of the transcribed content using a configurable GPT model.
+- **Error Handling**: Handles authentication, rate limits, connection issues, and other types of failures.
+- **Environment Configuration**: Easy setup using an `.env` file to securely manage the API key.
 
 ## 📦 Installation
 
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/your-username/AudioTranscriber.git
+git clone https://github.com/proteusbr1/AudioTranscriber
 cd AudioTranscriber
 ```
 
@@ -34,7 +35,7 @@ Ensure you have [pip](https://pip.pypa.io/en/stable/) installed. Then run:
 pip install -r requirements.txt
 ```
 
-### 4. Setup Environment Variables
+### 4. Set Up Environment Variables
 
 Create a `.env` file in the root directory of the project and add your OpenAI API key:
 
@@ -42,28 +43,43 @@ Create a `.env` file in the root directory of the project and add your OpenAI AP
 OPENAI_API_KEY=your_openai_api_key_here
 ```
 
-> **Note**: Replace `your_openai_api_key_here` with your actual OpenAI API key. You can obtain an API key from the [OpenAI Dashboard](https://platform.openai.com/account/api-keys).
+> **Note**: Replace `your_openai_api_key_here` with your actual OpenAI API key. You can obtain an API key from the [OpenAI Platform](https://platform.openai.com/account/api-keys).
 
 ## ⚙️ Usage
 
 ### Basic Usage
 
-Run the main script with the path to your audio or video file:
+Run the main script `main.py` by providing the path to an audio or video file:
 
 ```bash
 python main.py --input path/to/audio_or_video.mp4
-
 ```
 
-Or:
-```bash
-python main.py --input path/to/audio_or_video.mp4 --output path/to/output_transcription.txt --language en
+By default, the audio language and the transcription/summarization languages will be English (`en`). You can specify the audio language, transcription language, and summary language using the options below:
 
+- `--audio_language` or `-al`: Defines the original language of the audio. (Default: `en`)
+- `--transcript_language` or `-tl`: Defines the language for the final transcription. (Note: Whisper does not automatically translate)
+- `--summary_language` or `-sl`: Defines the language for the summary. (Default: `en`)
+
+Example:
+
+```bash
+python main.py --input path/to/video.mp4 --output path/to/output_transcription.txt --audio_language en --transcript_language en --summary_language pt
+```
+
+In this example, the audio will be transcribed in English, and a summary will subsequently be generated in Portuguese.
+
+### Help
+
+To see all available options:
+
+```bash
+python main.py -h
 ```
 
 ## 🤝 Contributing
 
-Contributions are welcome! If you'd like to enhance the project, follow these steps:
+Contributions are welcome! To enhance the project, follow these steps:
 
 1. **Fork the Repository**
 
