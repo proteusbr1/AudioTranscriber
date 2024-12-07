@@ -2,17 +2,23 @@ import os
 import tempfile
 from dotenv import load_dotenv
 from pydub import AudioSegment
-from openai import OpenAI
 import argparse
 import datetime
+import openai
+from openai import AuthenticationError, RateLimitError, APIConnectionError, APIError
+
+# -------------------- Configuration --------------------
+# Adjust these variables as needed:
+TRANSCRIPTION_MODEL = "whisper-1"      # Whisper model for transcription
+SUMMARY_MODEL = "gpt-3.5-turbo"        # GPT model for summarization
+DEFAULT_AUDIO_LANGUAGE = "en"          # Language of the original audio
+DEFAULT_TRANSCRIPT_LANGUAGE = "en"     # Transcription language (Whisper transcription does not translate automatically)
+DEFAULT_SUMMARY_LANGUAGE = "en"        # Summary language
+MAX_SIZE_MB = 25
+# -------------------------------------------------------
 
 
-# -------------------- Supported Languages by OpenAI Whisper --------------------
-# The following dictionary lists the languages supported by OpenAI's Whisper model
-# along with their corresponding ISO 639-1 codes. Use these codes with the
-# `--language` or `-l` argument to specify the language of the audio for
-# transcription.
-
+# -------------------- Supported Languages by Whisper --------------------
 SUPPORTED_LANGUAGES = {
     "af": "Afrikaans",
     "ar": "Arabic",
@@ -72,7 +78,6 @@ SUPPORTED_LANGUAGES = {
     "vi": "Vietnamese",
     "cy": "Welsh"
 }
-# ----------------------------------------------------------------------------------
 
 
 def parse_arguments():
@@ -81,81 +86,63 @@ def parse_arguments():
         epilog="Supported languages: " + ", ".join([f"{code} ({name})" for code, name in SUPPORTED_LANGUAGES.items()])
     )
     parser.add_argument('--input', '-i', required=True, help='Path to the input audio or video file.')
-    parser.add_argument('--language', '-l', default='en', help='Language code for transcription (default: en).')
-    parser.add_argument('--output', '-o', help='Path to the output text file for the transcription.')
+    parser.add_argument('--audio_language', '-al', default=DEFAULT_AUDIO_LANGUAGE, help='Language code of the original audio (default: en).')
+    parser.add_argument('--transcript_language', '-tl', default=DEFAULT_TRANSCRIPT_LANGUAGE, help='Language of the final transcription. (Note: Whisper transcriptions do not translate by default.)')
+    parser.add_argument('--summary_language', '-sl', default=DEFAULT_SUMMARY_LANGUAGE, help='Language for the summary (default: en).')
+    parser.add_argument('--output', '-o', help='Path to the output transcription text file.')
     args = parser.parse_args()
 
-    if args.language not in SUPPORTED_LANGUAGES:
-        parser.error(f"Unsupported language code '{args.language}'. Please choose from the supported languages listed in the comments.")
+    if args.audio_language not in SUPPORTED_LANGUAGES:
+        parser.error(f"Unsupported audio language code: '{args.audio_language}'.")
+
+    if args.transcript_language not in SUPPORTED_LANGUAGES:
+        parser.error(f"Unsupported transcription language code: '{args.transcript_language}'.")
+
+    if args.summary_language not in SUPPORTED_LANGUAGES:
+        parser.error(f"Unsupported summary language code: '{args.summary_language}'.")
 
     return args
 
-# Load environment variables from .env file
+# Load environment variables
 load_dotenv()
-
-# Initialize the OpenAI client with your API key
-client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-# Import necessary exceptions from OpenAI
-from openai import (
-    APIError,
-    OpenAIError,
-    AuthenticationError,
-    RateLimitError,
-    APIConnectionError,
-)
+openai.api_key = os.getenv("OPENAI_API_KEY")
 
 
 def extract_audio(video_file_path, audio_format='mp3'):
     """
-    Extracts audio from a video file and saves it as an audio file.
-
-    :param video_file_path: Path to the video file.
-    :param audio_format: Desired audio format (default: 'mp3').
-    :return: Path to the extracted audio file.
+    Extract audio from a video file.
     """
     try:
         print(f"Extracting audio from video file: {video_file_path}")
-        # Load the video file
         audio = AudioSegment.from_file(video_file_path)
-
-        # Create a temporary file to save the extracted audio
         temp_audio_file = tempfile.NamedTemporaryFile(delete=False, suffix=f".{audio_format}")
         audio.export(temp_audio_file.name, format=audio_format)
-        print(f"Audio extracted and saved to temporary file: {temp_audio_file.name}")
+        print(f"Audio extracted to temporary file: {temp_audio_file.name}")
         return temp_audio_file.name
     except Exception as e:
-        print(f"Failed to extract audio from video file: {e}")
+        print(f"Failed to extract audio: {e}")
         return None
 
 
 def split_audio(file_path, max_size_mb=25, safety_margin=5000):
     """
-    Splits an audio file into smaller segments that are below the specified maximum size.
-
-    :param file_path: Path to the original audio file.
-    :param max_size_mb: Maximum size of each segment in megabytes.
-    :param safety_margin: Number of bytes to subtract as safety margin.
-    :return: List of paths to the split audio files.
+    Split an audio file into smaller parts, each up to max_size_mb megabytes.
     """
     try:
-        # Load the audio file
         audio = AudioSegment.from_file(file_path)
         max_size_bytes = max_size_mb * 1024 * 1024 - safety_margin
 
-        # Set the bitrate for exporting in bytes per second
-        export_bitrate_kbps = 128  # kbps
-        export_bitrate_bps = (export_bitrate_kbps * 1000) / 8  # Convert to bytes per second
+        # Assuming 128kbps bitrate for export
+        export_bitrate_kbps = 128
+        export_bitrate_bps = (export_bitrate_kbps * 1000) / 8
 
-        # Calculate the duration for each segment in milliseconds
         segment_duration_sec = max_size_bytes / export_bitrate_bps
         segment_duration_ms = segment_duration_sec * 1000
 
-        print(f"Export bitrate: {export_bitrate_kbps} kbps")
-        print(f"Estimated duration per segment: {segment_duration_sec:.2f} seconds")
+        print(f"Bitrate: {export_bitrate_kbps} kbps")
+        print(f"Estimated duration per segment: {segment_duration_sec:.2f} sec")
 
         segments = []
-        # Split the audio into segments
         for start_ms in range(0, len(audio), int(segment_duration_ms)):
             end_ms = start_ms + int(segment_duration_ms)
             segment = audio[start_ms:end_ms]
@@ -163,128 +150,158 @@ def split_audio(file_path, max_size_mb=25, safety_margin=5000):
             segment.export(segment_file, format="mp3", bitrate=f"{export_bitrate_kbps}k")
             segments.append(segment_file)
             actual_file_size = os.path.getsize(segment_file)
-            print(f"Exported: {segment_file} ({start_ms/1000:.2f} - {min(end_ms/1000, len(audio)/1000):.2f} seconds), size: {actual_file_size} bytes")
+            print(f"Exported: {segment_file} ({start_ms/1000:.2f} - {min(end_ms/1000, len(audio)/1000):.2f} s), size: {actual_file_size} bytes")
         return segments
     except Exception as e:
-        print(f"Failed to split audio file: {e}")
+        print(f"Failed to split the audio: {e}")
         return []
 
 
-def transcribe_audio(file_path, language=None, response_format="json"):
-    """
-    Transcribes an audio file using the OpenAI Whisper API.
-
-    :param file_path: Path to the audio file.
-    :param language: (Optional) Language code of the audio (e.g., "en" for English).
-    :param response_format: Response format ("json", "text", "verbose_json", etc.).
-    :return: Transcription text or None in case of error.
-    """
+def transcribe_audio(file_path, audio_language=None):
     try:
         with open(file_path, "rb") as audio_file:
-            print(f"Sending {file_path} to OpenAI Whisper API for transcription...")
-            transcription = client.audio.transcriptions.create(
+            print(f"Sending {file_path} for transcription...")
+            transcription = openai.audio.transcriptions.create(
                 model="whisper-1",
                 file=audio_file,
-                language=language,
-                response_format=response_format
+                language=audio_language
             )
-            print(f"Transcription successful for file: {file_path}")
+            print(f"Transcription completed for {file_path}.")
             return transcription.text
     except AuthenticationError as e:
-        print("Authentication error with OpenAI API:", e)
+        print("Authentication error:", e)
     except RateLimitError as e:
-        print("Rate limit exceeded. Please try again later:", e)
+        print("Rate limit exceeded:", e)
     except APIConnectionError as e:
-        print("Connection issue with OpenAI API:", e)
+        print("Connection issue with the API:", e)
     except APIError as e:
-        print("General API error from OpenAI:", e)
+        print("API error:", e)
     except FileNotFoundError:
         print(f"File not found: {file_path}")
     except Exception as e:
-        print(f"An unexpected error occurred during transcription: {e}")
+        print(f"Unexpected error during transcription: {e}")
     return None
 
 
-def main(input_file_path, language="en", output_file_path=None):
+def summarize_transcription(transcript, summary_language=DEFAULT_SUMMARY_LANGUAGE):
     """
-    Main function to extract audio from video (if necessary), split it if too large, and transcribe.
+    Summarize the transcribed text using a GPT model.
+    """
+    try:
+        print("Generating summary...")
+        system_prompt = f"You are an assistant that summarizes lectures. Please provide a summary of the main points discussed. The summary should be in {summary_language}."
+        user_prompt = f"Here is the lecture transcription:\n\n{transcript}\n\nPlease provide a summary of the main points above."
 
-    :param input_file_path: Path to the original audio or video file.
-    :param language: Language code of the audio (default: "en" for English).
-    :param output_file_path: Path to the output transcription file.
+        response = openai.chat.completions.create(
+            model=SUMMARY_MODEL,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ],
+            temperature=0.7
+        )
+        summary = response.choices[0].message.content.strip()
+        print("Summary generated successfully.")
+        return summary
+    except Exception as e:
+        print(f"Failed to generate summary: {e}")
+        return None
+
+
+def main(input_file_path, audio_language=DEFAULT_AUDIO_LANGUAGE, transcript_language=DEFAULT_TRANSCRIPT_LANGUAGE, summary_language=DEFAULT_SUMMARY_LANGUAGE, output_file_path=None):
     """
-    # Check if the file exists
+    Main function: extract audio from video (if needed), transcribe, and summarize.
+    """
     if not os.path.exists(input_file_path):
         print(f"File not found: {input_file_path}")
         return
 
-    # Determine if the input file is a video based on its extension
     video_extensions = {'.mp4', '.mov', '.avi', '.mkv', '.flv', '.wmv'}
     file_ext = os.path.splitext(input_file_path)[1].lower()
 
-    audio_file_path = input_file_path  # Default to input file
+    audio_file_path = input_file_path
 
-    # If the file is a video, extract the audio
+    # If input is a video, extract its audio
     if file_ext in video_extensions:
         audio_file_path = extract_audio(input_file_path, audio_format='mp3')
         if not audio_file_path:
-            print("Audio extraction failed. Cannot proceed with transcription.")
+            print("Audio extraction failed. Exiting.")
             return
 
-    try:
-        # Check the file size
-        file_size = os.path.getsize(audio_file_path)
-        max_size_mb = 25
-        max_size_bytes = max_size_mb * 1024 * 1024
+    # Check file size
+    file_size = os.path.getsize(audio_file_path)
+    max_size_bytes = MAX_SIZE_MB * 1024 * 1024
 
-        # Determine the output file path
-        if not output_file_path:
-            base_name = os.path.splitext(os.path.basename(input_file_path))[0]
-            timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
-            output_file_path = f"{base_name}_{timestamp}_transcription.txt"
+    # Default output paths
+    if not output_file_path:
+        base_name = os.path.splitext(os.path.basename(input_file_path))[0]
+        timestamp = datetime.datetime.now().strftime("%Y%m%d%H%M%S")
+        output_file_path = f"{base_name}_{timestamp}_transcription.txt"
+    summary_output_file = output_file_path.replace("_transcription.txt", "_summary.txt")
 
-        if file_size <= max_size_bytes:
-            print("The file is within the size limit. Proceeding with transcription.")
-            transcription = transcribe_audio(audio_file_path, language=language)
-            if transcription:
-                with open(output_file_path, 'w', encoding='utf-8') as f:
-                    f.write(transcription)
-                print(f"Transcription written to {output_file_path}")
-            else:
-                print("Failed to transcribe the audio.")
-        else:
-            print(f"The file exceeds the {max_size_mb} MB limit (current size: {file_size / (1024 * 1024):.2f} MB).")
-            print("Splitting the file into smaller parts...")
-
-            # Split the audio into smaller parts
-            segments = split_audio(audio_file_path, max_size_mb=max_size_mb)
-            all_transcriptions = []
-
-            # Transcribe each segment
-            for segment in segments:
-                print(f"\nTranscribing: {segment}")
-                transcription = transcribe_audio(segment, language=language)
-                if transcription:
-                    all_transcriptions.append(transcription)
-                    print(f"Transcription of {segment} completed.")
-                else:
-                    print(f"Failed to transcribe {segment}.")
-
-            # Combine all transcriptions
-            combined_transcription = "\n".join(all_transcriptions)
+    # If the file is within the size limit
+    if file_size <= max_size_bytes:
+        print("File size is within limit. Starting transcription...")
+        transcription = transcribe_audio(audio_file_path, audio_language=audio_language)
+        if transcription:
             with open(output_file_path, 'w', encoding='utf-8') as f:
-                f.write(combined_transcription)
-            print(f"Complete transcription written to {output_file_path}")
-    finally:
-        # Clean up temporary audio file if it was extracted from a video
-        if file_ext in video_extensions and audio_file_path and os.path.exists(audio_file_path):
-            try:
-                os.remove(audio_file_path)
-                print(f"Temporary audio file deleted: {audio_file_path}")
-            except Exception as e:
-                print(f"Failed to delete temporary audio file: {e}")
+                f.write(transcription)
+            print(f"Transcription saved to: {output_file_path}")
+
+            # Generate summary
+            summary = summarize_transcription(transcription, summary_language=summary_language)
+            if summary:
+                with open(summary_output_file, 'w', encoding='utf-8') as f:
+                    f.write(summary)
+                print(f"Summary saved to: {summary_output_file}")
+            else:
+                print("Failed to generate summary.")
+        else:
+            print("Transcription failed.")
+    else:
+        # If file is too large, split into segments
+        print(f"The file exceeds {MAX_SIZE_MB} MB (current size: {file_size / (1024 * 1024):.2f} MB). Splitting the audio...")
+        segments = split_audio(audio_file_path, max_size_mb=MAX_SIZE_MB)
+        all_transcriptions = []
+
+        for segment in segments:
+            print(f"\nTranscribing segment: {segment}")
+            segment_transcription = transcribe_audio(segment, audio_language=audio_language)
+            if segment_transcription:
+                all_transcriptions.append(segment_transcription)
+                print(f"Segment transcription completed: {segment}.")
+            else:
+                print(f"Failed to transcribe segment: {segment}.")
+
+        combined_transcription = "\n".join(all_transcriptions)
+        with open(output_file_path, 'w', encoding='utf-8') as f:
+            f.write(combined_transcription)
+        print(f"Complete transcription saved to: {output_file_path}")
+
+        # Generate summary of the entire text
+        summary = summarize_transcription(combined_transcription, summary_language=summary_language)
+        if summary:
+            with open(summary_output_file, 'w', encoding='utf-8') as f:
+                f.write(summary)
+            print(f"Summary saved to: {summary_output_file}")
+        else:
+            print("Failed to generate summary.")
+
+    # Clean up temporary audio file if one was extracted
+    if file_ext in video_extensions and audio_file_path and os.path.exists(audio_file_path):
+        try:
+            os.remove(audio_file_path)
+            print(f"Temporary audio file removed: {audio_file_path}")
+        except Exception as e:
+            print(f"Failed to remove temporary audio file: {e}")
 
 
 if __name__ == "__main__":
     args = parse_arguments()
-    main(args.input, language=args.language, output_file_path=args.output)
+    main(
+        args.input,
+        audio_language=args.audio_language,
+        transcript_language=args.transcript_language,
+        summary_language=args.summary_language,
+        output_file_path=args.output
+    )
