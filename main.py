@@ -10,7 +10,7 @@ from openai import AuthenticationError, RateLimitError, APIConnectionError, APIE
 # -------------------- Configuration --------------------
 # Adjust these variables as needed:
 TRANSCRIPTION_MODEL = "whisper-1"      # Whisper model for transcription
-SUMMARY_MODEL = "gpt-3.5-turbo"        # GPT model for summarization
+SUMMARY_MODEL = "gpt-4o-mini"          # GPT model for summarization
 DEFAULT_AUDIO_LANGUAGE = "en"          # Language of the original audio
 DEFAULT_TRANSCRIPT_LANGUAGE = "en"     # Transcription language (Whisper transcription does not translate automatically)
 DEFAULT_SUMMARY_LANGUAGE = "en"        # Summary language
